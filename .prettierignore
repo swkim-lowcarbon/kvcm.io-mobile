@@ -1,0 +1,11 @@
+node_modules/
+android/
+ios/
+__tests__/
+*.config.js
+metro.config.js
+babel.config.js
+jest.config.js
+yarn.lock
+package-lock.json
+*.md
