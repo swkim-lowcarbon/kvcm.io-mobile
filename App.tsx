@@ -57,42 +57,55 @@ function App(): React.JSX.Element {
 
   // WalletConnect 연결 상태 동기화
   useEffect(() => {
-    console.log('WalletConnect 연결 상태:', modalIsConnected);
+    try {
+      console.log('WalletConnect 연결 상태:', modalIsConnected);
 
-    if (modalIsConnected && provider) {
-      // 연결된 경우 계정 정보 가져오기
-      const getAccounts = async () => {
-        try {
-          const accounts = (await provider.request({
-            method: 'eth_accounts',
-          })) as string[];
+      if (modalIsConnected && provider) {
+        // 연결된 경우 계정 정보 가져오기
+        const getAccounts = async () => {
+          try {
+            console.log('계정 정보 요청 중...');
+            const accounts = (await provider.request({
+              method: 'eth_accounts',
+            })) as string[];
 
-          if (accounts && accounts.length > 0) {
-            setWalletAddress(accounts[0]);
-            setIsConnected(true);
-            console.log('지갑 연결 완료:', accounts[0]);
+            if (accounts && accounts.length > 0) {
+              setWalletAddress(accounts[0]);
+              setIsConnected(true);
+              console.log('지갑 연결 완료:', accounts[0]);
+            } else {
+              console.log('연결된 계정이 없습니다.');
+            }
+          } catch (error) {
+            console.error('계정 정보 가져오기 실패:', error);
+            setWalletAddress('');
+            setIsConnected(false);
           }
-        } catch (error) {
-          console.error('계정 정보 가져오기 실패:', error);
-        }
-      };
+        };
 
-      getAccounts();
-    } else {
-      // 연결 해제된 경우
+        getAccounts();
+      } else {
+        // 연결 해제된 경우
+        setWalletAddress('');
+        setIsConnected(false);
+        console.log('지갑 연결 해제됨');
+      }
+    } catch (error) {
+      console.error('WalletConnect 상태 동기화 오류:', error);
       setWalletAddress('');
       setIsConnected(false);
-      console.log('지갑 연결 해제됨');
     }
   }, [modalIsConnected, provider]);
 
   // 메타마스크 연결
   const connectWallet = async () => {
     try {
+      console.log('지갑 연결 시작...');
       const result = await open();
+      console.log('지갑 연결 결과:', result);
     } catch (error) {
       console.error('Wallet 연결 실패:', error);
-      Alert.alert('연결 실패', '지갑 연결에 실패했습니다.');
+      Alert.alert('연결 실패', '지갑 연결에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -357,10 +370,10 @@ function App(): React.JSX.Element {
       <WalletConnectModal
         projectId={modalConfig.projectId}
         providerMetadata={{
-          name: 'Mobile App',
-          description: 'Mobile App with WalletConnect',
-          url: 'https://your-app.com',
-          icons: ['https://your-app.com/icon.png'],
+          name: walletConnectConfig.metadata.name,
+          description: walletConnectConfig.metadata.description,
+          url: walletConnectConfig.metadata.url,
+          icons: [walletConnectConfig.metadata.icons[0]],
           redirect: {
             native: 'your-app://',
             universal: 'https://your-app.com',
