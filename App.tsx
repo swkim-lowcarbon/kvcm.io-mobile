@@ -16,6 +16,11 @@ import {
   Text,
   Alert,
 } from 'react-native';
+import {
+  WalletConnectModal,
+  useWalletConnectModal,
+} from '@walletconnect/modal-react-native';
+import { walletConnectConfig, modalConfig } from './walletConnectConfig';
 
 function App(): React.JSX.Element {
   const [isGoogleLoginModalVisible, setIsGoogleLoginModalVisible] =
@@ -26,7 +31,17 @@ function App(): React.JSX.Element {
     id_token: string;
     state: string;
   } | null>(null);
+
+  // WalletConnect 상태
+  const [walletAddress, setWalletAddress] = useState<string>('');
+  const [isConnected, setIsConnected] = useState(false);
+
   const mainWebViewRef = useRef<WebView>(null);
+  const {
+    open,
+    isConnected: modalIsConnected,
+    provider,
+  } = useWalletConnectModal();
 
   // Android 에뮬레이터에서는 10.0.2.2를 사용해야 호스트 머신의 localhost에 접근 가능
   const baseUrl =
@@ -39,6 +54,90 @@ function App(): React.JSX.Element {
     '1063057034813-60kk0n3hlr20ht6e84v6orukki2atkvj.apps.googleusercontent.com';
   const GOOGLE_REDIRECT_URI = 'https://www.kvcm.io';
   const GOOGLE_SCOPE = 'openid email profile';
+
+  // WalletConnect 연결 상태 동기화
+  useEffect(() => {
+    console.log('WalletConnect 연결 상태:', modalIsConnected);
+
+    if (modalIsConnected && provider) {
+      // 연결된 경우 계정 정보 가져오기
+      const getAccounts = async () => {
+        try {
+          const accounts = (await provider.request({
+            method: 'eth_accounts',
+          })) as string[];
+
+          if (accounts && accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+            setIsConnected(true);
+            console.log('지갑 연결 완료:', accounts[0]);
+          }
+        } catch (error) {
+          console.error('계정 정보 가져오기 실패:', error);
+        }
+      };
+
+      getAccounts();
+    } else {
+      // 연결 해제된 경우
+      setWalletAddress('');
+      setIsConnected(false);
+      console.log('지갑 연결 해제됨');
+    }
+  }, [modalIsConnected, provider]);
+
+  // 메타마스크 연결
+  const connectWallet = async () => {
+    try {
+      const result = await open();
+    } catch (error) {
+      console.error('Wallet 연결 실패:', error);
+      Alert.alert('연결 실패', '지갑 연결에 실패했습니다.');
+    }
+  };
+
+  // 지갑 연결 해제
+  const disconnectWallet = async () => {
+    try {
+      if (provider) {
+        await provider.disconnect();
+        setWalletAddress('');
+        setIsConnected(false);
+      }
+    } catch (error) {
+      console.error('지갑 연결 해제 실패:', error);
+    }
+  };
+
+  // 서명 요청
+  const signMessage = async () => {
+    if (!provider || !walletAddress) {
+      Alert.alert('오류', '먼저 지갑을 연결해주세요.');
+      return;
+    }
+
+    try {
+      const message = '안녕하세요! 이 메시지에 서명해주세요.';
+      const signature = await provider.request({
+        method: 'personal_sign',
+        params: [message, walletAddress],
+      });
+
+      Alert.alert('서명 성공', `서명: ${signature}`);
+
+      // 웹뷰에 서명 성공 메시지 전송
+      mainWebViewRef.current?.postMessage(
+        JSON.stringify({
+          type: 'WALLET_SIGN_SUCCESS',
+          signature: signature,
+          message: message,
+        })
+      );
+    } catch (error) {
+      console.error('서명 실패:', error);
+      Alert.alert('서명 실패', '메시지 서명에 실패했습니다.');
+    }
+  };
 
   // 모달 WebView로 Google 로그인 열기
   const openGoogleLoginWithModal = (url: string) => {
@@ -73,8 +172,6 @@ function App(): React.JSX.Element {
       );
     }
   };
-
-  // 웹뷰 로드 완료 시 초기화
 
   // 구글 로그인 모달 닫기
   const closeGoogleLoginModal = () => {
@@ -130,6 +227,39 @@ function App(): React.JSX.Element {
         mixedContentMode="always"
         allowsInlineMediaPlayback={true}
       />
+
+      {/* WalletConnect 지갑 연결 버튼 */}
+      <View style={styles.walletButtons}>
+        {!isConnected ? (
+          <TouchableOpacity
+            style={styles.connectButton}
+            onPress={connectWallet}
+          >
+            <Text style={styles.buttonText}>지갑 연결</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.connectedButtons}>
+            <TouchableOpacity style={styles.signButton} onPress={signMessage}>
+              <Text style={styles.buttonText}>메시지 서명</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.disconnectButton}
+              onPress={disconnectWallet}
+            >
+              <Text style={styles.buttonText}>연결 해제</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* 지갑 주소 표시 */}
+      {walletAddress && (
+        <View style={styles.addressContainer}>
+          <Text style={styles.addressText}>
+            연결된 지갑: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+          </Text>
+        </View>
+      )}
 
       {/* 구글 로그인 모달 */}
       <Modal
@@ -222,6 +352,25 @@ function App(): React.JSX.Element {
           />
         </View>
       </Modal>
+
+      {/* WalletConnect Modal */}
+      <WalletConnectModal
+        projectId={modalConfig.projectId}
+        providerMetadata={{
+          name: 'Mobile App',
+          description: 'Mobile App with WalletConnect',
+          url: 'https://your-app.com',
+          icons: ['https://your-app.com/icon.png'],
+          redirect: {
+            native: 'your-app://',
+            universal: 'https://your-app.com',
+          },
+        }}
+        explorerRecommendedWalletIds={[
+          'c57ca95b47569778a828d19178114f4db188b89b',
+        ]}
+        explorerExcludedWalletIds="ALL"
+      />
     </View>
   );
 }
@@ -232,6 +381,69 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
+  },
+  walletButtons: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1000,
+  },
+  connectButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  connectedButtons: {
+    gap: 8,
+  },
+  signButton: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  disconnectButton: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  addressContainer: {
+    position: 'absolute',
+    top: 120,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    zIndex: 1000,
+  },
+  addressText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
   },
   modalContainer: {
     flex: 1,
