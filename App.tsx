@@ -41,6 +41,8 @@ function App(): React.JSX.Element {
     open,
     isConnected: modalIsConnected,
     provider,
+    isOpen,
+    close,
   } = useWalletConnectModal();
 
   // Android 에뮬레이터에서는 10.0.2.2를 사용해야 호스트 머신의 localhost에 접근 가능
@@ -57,54 +59,121 @@ function App(): React.JSX.Element {
 
   // WalletConnect 연결 상태 동기화
   useEffect(() => {
-    try {
-      console.log('WalletConnect 연결 상태:', modalIsConnected);
+    console.log(
+      '🔗 WalletConnect 상태:',
+      modalIsConnected,
+      'Provider:',
+      !!provider,
+      'isOpen:',
+      isOpen
+    );
 
-      if (modalIsConnected && provider) {
-        // 연결된 경우 계정 정보 가져오기
-        const getAccounts = async () => {
-          try {
-            console.log('계정 정보 요청 중...');
-            const accounts = (await provider.request({
-              method: 'eth_accounts',
-            })) as string[];
+    if (modalIsConnected && provider) {
+      const getAccounts = async () => {
+        try {
+          const accounts = (await provider.request({
+            method: 'eth_accounts',
+          })) as string[];
 
-            if (accounts && accounts.length > 0) {
-              setWalletAddress(accounts[0]);
-              setIsConnected(true);
-              console.log('지갑 연결 완료:', accounts[0]);
-            } else {
-              console.log('연결된 계정이 없습니다.');
+          if (accounts && accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+            setIsConnected(true);
+            console.log('✅ 지갑 연결 성공:', accounts[0]);
+
+            try {
+              const balance = await provider.request({
+                method: 'eth_getBalance',
+                params: [accounts[0], 'latest'],
+              });
+              const chainId = await provider.request({
+                method: 'eth_chainId',
+              });
+
+              mainWebViewRef.current?.postMessage(
+                JSON.stringify({
+                  type: 'WALLET_CONNECT_SUCCESS',
+                  data: {
+                    address: accounts[0],
+                    balance: balance,
+                    chainId: chainId,
+                    message: '지갑 연결이 완료되었습니다.',
+                  },
+                })
+              );
+            } catch (balanceError) {
+              console.log('⚠️ 잔액 조회 실패, 기본 정보만 전송');
+              mainWebViewRef.current?.postMessage(
+                JSON.stringify({
+                  type: 'WALLET_CONNECT_SUCCESS',
+                  data: {
+                    address: accounts[0],
+                    message: '지갑 연결이 완료되었습니다. (잔액 조회 실패)',
+                  },
+                })
+              );
             }
-          } catch (error) {
-            console.error('계정 정보 가져오기 실패:', error);
-            setWalletAddress('');
-            setIsConnected(false);
           }
-        };
+        } catch (error) {
+          console.error('❌ 계정 정보 가져오기 실패:', error);
+          setWalletAddress('');
+          setIsConnected(false);
+          mainWebViewRef.current?.postMessage(
+            JSON.stringify({
+              type: 'WALLET_CONNECT_ERROR',
+              data: {
+                error: '지갑 연결에 실패했습니다.',
+                message:
+                  error instanceof Error
+                    ? error.message
+                    : '알 수 없는 오류가 발생했습니다.',
+              },
+            })
+          );
+        }
+      };
 
-        getAccounts();
-      } else {
-        // 연결 해제된 경우
-        setWalletAddress('');
-        setIsConnected(false);
-        console.log('지갑 연결 해제됨');
-      }
-    } catch (error) {
-      console.error('WalletConnect 상태 동기화 오류:', error);
+      getAccounts();
+    } else {
       setWalletAddress('');
       setIsConnected(false);
+      console.log('🔌 지갑 연결 해제됨');
     }
   }, [modalIsConnected, provider]);
+
+  // 모달 상태 변화 감지
+  useEffect(() => {
+    console.log('📱 모달 상태 변화:', isOpen);
+  }, [isOpen]);
 
   // 메타마스크 연결
   const connectWallet = async () => {
     try {
-      console.log('지갑 연결 시작...');
+      console.log('🚀 지갑 연결 시작');
+      console.log(
+        '현재 상태 - isConnected:',
+        modalIsConnected,
+        'isOpen:',
+        isOpen,
+        'provider:',
+        !!provider
+      );
+
       const result = await open();
-      console.log('지갑 연결 결과:', result);
+      console.log('📱 지갑 연결 결과:', result);
+
+      // 연결 후 상태 확인
+      setTimeout(() => {
+        console.log(
+          '연결 후 상태 - isConnected:',
+          modalIsConnected,
+          'isOpen:',
+          isOpen,
+          'provider:',
+          !!provider
+        );
+      }, 1000);
     } catch (error) {
-      console.error('Wallet 연결 실패:', error);
+      console.error('❌ Wallet 연결 실패:', error);
       Alert.alert('연결 실패', '지갑 연결에 실패했습니다. 다시 시도해주세요.');
     }
   };
@@ -239,6 +308,27 @@ function App(): React.JSX.Element {
         originWhitelist={['*']}
         mixedContentMode="always"
         allowsInlineMediaPlayback={true}
+        onMessage={event => {
+          try {
+            const message = JSON.parse(event.nativeEvent.data);
+            console.log('📨 웹뷰 메시지:', message.type);
+
+            switch (message.type) {
+              case 'WALLET_CONNECT_ATTEMPT':
+                console.log('🔗 지갑 연결 요청');
+                connectWallet();
+                break;
+              case 'GOOGLE_LOGIN_REQUEST':
+                console.log('🔐 구글 로그인 요청');
+                startGoogleLogin();
+                break;
+              default:
+                console.log('❓ 알 수 없는 메시지:', message.type);
+            }
+          } catch (error) {
+            console.error('❌ 웹뷰 메시지 파싱 오류:', error);
+          }
+        }}
       />
 
       {/* WalletConnect 지갑 연결 버튼 */}
