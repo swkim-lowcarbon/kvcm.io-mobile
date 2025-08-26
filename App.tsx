@@ -308,6 +308,14 @@ function App(): React.JSX.Element {
         originWhitelist={['*']}
         mixedContentMode="always"
         allowsInlineMediaPlayback={true}
+        mediaPlaybackRequiresUserAction={false}
+        allowsAirPlayForMediaPlayback={true}
+        allowsPictureInPictureMediaPlayback={true}
+        // iOS에서 동영상 자동 재생을 위한 추가 설정
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        // iOS에서 미디어 재생 최적화
+        allowsProtectedMedia={true}
         onMessage={event => {
           try {
             const message = JSON.parse(event.nativeEvent.data);
@@ -397,14 +405,33 @@ function App(): React.JSX.Element {
             scalesPageToFit={true}
             allowsInlineMediaPlayback={true}
             mediaPlaybackRequiresUserAction={false}
-            // 403 오류 방지를 위한 추가 설정
-            userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-            // 추가 보안 설정
+            // iOS에서 구글 로그인을 위한 User Agent 설정 (웹뷰 감지용)
+            userAgent={
+              Platform.OS === 'ios'
+                ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1 wv'
+                : 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+            }
+            // iOS에서 구글 로그인을 위한 추가 설정
             allowsBackForwardNavigationGestures={false}
             allowsLinkPreview={false}
             // 쿠키 및 캐시 설정
             sharedCookiesEnabled={true}
             cacheEnabled={true}
+            // iOS에서 구글 로그인 최적화
+            allowsFileAccessFromFileURLs={true}
+            allowsUniversalAccessFromFileURLs={true}
+            javaScriptCanOpenWindowsAutomatically={true}
+            // iOS에서 WebView 성능 및 안정성 향상
+            allowsAirPlayForMediaPlayback={true}
+            allowsPictureInPictureMediaPlayback={true}
+            allowsProtectedMedia={true}
+            // iOS에서 쿠키 및 세션 관리 개선
+            incognito={false}
+            // iOS에서 JavaScript 실행 최적화
+            onShouldStartLoadWithRequest={request => {
+              // iOS에서 구글 로그인 리다이렉트 허용
+              return true;
+            }}
             onNavigationStateChange={navState => {
               // Google OAuth 콜백 URL 감지
               if (navState.url.includes('www.kvcm.io')) {
