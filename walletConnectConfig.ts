@@ -8,7 +8,7 @@ export const walletConnectConfig = {
     url: 'https://www.kvcm.io',
     icons: ['https://www.kvcm.io/favicon.ico'],
   },
-  chains: [1], // Ethereum Mainnet
+  chains: ['eip155:1'], // Ethereum Mainnet with proper format
   walletConnectVersion: 2,
 };
 
